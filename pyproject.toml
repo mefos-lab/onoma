@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "onoma"
+version = "0.1.0"
+description = "Name normalization and matching for public-records entity resolution"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+dependencies = [
+    # All pure-Python: no C toolchain, so this stays pip-installable anywhere.
+    # This is a deliberate constraint — the alternative considered (rigour)
+    # pulls in PyICU, which needs the ICU C library and fails to build without
+    # it. See README for the evaluation.
+    "nameparser>=1.1",   # person names: titles, first/middle/last, suffixes
+    "nicknames>=1.0",    # nickname <-> canonical given names
+    "cleanco>=2.3",      # corporate legal suffixes
+    "rapidfuzz>=3.0",    # fuzzy scoring
+    "Unidecode>=1.3",    # diacritic folding
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["onoma"]
