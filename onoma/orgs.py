@@ -11,6 +11,7 @@ gap this module fills.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
 from cleanco import basename
 
@@ -36,6 +37,11 @@ _POLITICAL_TYPES = (
 DEFAULT_THRESHOLD = 0.6
 
 
+# Callers compare one name against a whole list, so the same name is
+# stripped repeatedly — n names against m names strips each one m times
+# without this. The work is regex substitution plus two folds plus a
+# cleanco lookup, which is not cheap enough to repeat.
+@lru_cache(maxsize=8192)
 def strip_entity_types(name: str) -> str:
     """Remove corporate and political entity types from an org name."""
     folded = fold(name)
@@ -46,14 +52,21 @@ def strip_entity_types(name: str) -> str:
     return fold(basename(folded))
 
 
+def _distinctive_from_stripped(stripped: str) -> set[str]:
+    return {t for t in tokens(stripped) if not is_generic_org_token(t)}
+
+
 def distinctive_tokens(name: str) -> set[str]:
     """Tokens that actually identify an organisation.
 
     Generic vocabulary is excluded because sharing it is not evidence.
     This is the check that separates a real abbreviation match from two
     unrelated committees that merely share a surname and a preposition.
+
+    A fresh set each call, so a caller mutating the result cannot reach
+    the cache behind :func:`strip_entity_types`.
     """
-    return {t for t in tokens(strip_entity_types(name)) if not is_generic_org_token(t)}
+    return _distinctive_from_stripped(strip_entity_types(name))
 
 
 class OrgMatch:
@@ -124,10 +137,13 @@ def compare_orgs(a: str, b: str) -> OrgMatch:
     That keeps it matching itself and its suffixed variants while
     refusing to match a longer name that merely contains the word.
     """
-    stripped_a = strip_entity_types(a)
-    exact = bool(stripped_a) and stripped_a == strip_entity_types(b)
+    stripped_a, stripped_b = strip_entity_types(a), strip_entity_types(b)
+    exact = bool(stripped_a) and stripped_a == stripped_b
 
-    da, db = distinctive_tokens(a), distinctive_tokens(b)
+    # Derived from the stripped forms already computed. Calling
+    # distinctive_tokens here would strip both names a second time.
+    da = _distinctive_from_stripped(stripped_a)
+    db = _distinctive_from_stripped(stripped_b)
     if not da and not db:
         return OrgMatch(1.0 if exact else 0.0, set(), da, db, exact)
     if not da or not db:
