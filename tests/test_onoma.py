@@ -255,3 +255,75 @@ class TestClassify:
         as people and inflate the unresolved count."""
         assert o.classify(name) is o.NameKind.UNKNOWN
         assert not o.is_person(name)
+
+
+class TestFunctionWordsAreNotIdentifying:
+    """Found in packed, matching campaign vendors against super-PAC payees.
+
+    "AT&T" folds to the single token "at" — the ampersand goes and the
+    lone "T" is dropped as an initial. With "at" absent from the generic
+    set it counted as distinctive, and because overlap is scored against
+    the shorter name, a one-token name scored a perfect 1.0 against any
+    longer name containing that word.
+    """
+
+    def test_the_reported_false_positive(self):
+        assert not o.same_org("AT&T", "MILLER'S SUPPLIES AT WORK")
+
+    @pytest.mark.parametrize("word", ["at", "in", "on", "to", "by", "with", "from", "or"])
+    def test_function_words_are_generic(self, word):
+        assert o.is_generic_org_token(word)
+
+    @pytest.mark.parametrize("a,b", [
+        ("AT&T", "SUPPLIES AT WORK"),
+        ("IN", "CITIZENS IN ACTION"),
+        ("ON", "MARCH ON WASHINGTON"),
+    ])
+    def test_a_name_that_is_only_a_function_word_matches_nothing_longer(self, a, b):
+        assert not o.same_org(a, b)
+
+
+class TestNamesWithNothingDistinctive:
+    """A name can reduce to no distinctive tokens at all. It must still
+    match itself, which overlap scoring alone cannot do — the empty set
+    shares nothing with the empty set."""
+
+    @pytest.mark.parametrize("a,b", [
+        ("AT&T", "AT&T"),
+        ("AT&T", "AT&T Inc"),
+        ("AT&T", "at & t"),
+    ])
+    def test_matches_itself_and_its_suffixed_forms(self, a, b):
+        assert o.same_org(a, b)
+        assert o.compare_orgs(a, b).exact
+
+    def test_one_side_distinctive_and_the_other_not_is_no_evidence(self):
+        m = o.compare_orgs("AT&T", "AMALGAMATED BANK")
+        assert m.score == 0.0
+        assert not m.exact
+
+    def test_an_empty_name_matches_nothing(self):
+        assert not o.same_org("", "")
+        assert not o.same_org("", "AT&T")
+
+
+class TestExactMatchIsNotWeak:
+    """`require_strong` rejected a one-word organisation compared against
+    itself, because one shared token is fewer than two. Certainty about
+    identical names should not depend on how many words they have."""
+
+    @pytest.mark.parametrize("name", ["LEXISNEXIS", "AT&T", "UBER"])
+    def test_identical_names_survive_require_strong(self, name):
+        assert o.same_org(name, name, require_strong=True)
+        assert not o.compare_orgs(name, name).weak
+
+    def test_entity_suffix_does_not_make_a_match_weak(self):
+        assert o.same_org("Mission Control", "Mission Control Inc", require_strong=True)
+
+    def test_a_genuine_single_token_overlap_is_still_weak(self):
+        """An abbreviation sharing one word with a longer name remains a
+        candidate to corroborate, not a conclusion."""
+        m = o.compare_orgs("UBER", "UBER TECHNOLOGIES INC")
+        assert m.score == 1.0
+        assert m.weak
+        assert not o.same_org("UBER", "UBER TECHNOLOGIES INC", require_strong=True)

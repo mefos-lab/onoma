@@ -65,14 +65,17 @@ class OrgMatch:
     comparison cannot. Returning the evidence lets them.
     """
 
-    __slots__ = ("score", "shared", "a_tokens", "b_tokens")
+    __slots__ = ("score", "shared", "a_tokens", "b_tokens", "exact")
 
     def __init__(self, score: float, shared: set[str],
-                 a_tokens: set[str], b_tokens: set[str]):
+                 a_tokens: set[str], b_tokens: set[str],
+                 exact: bool = False):
         self.score = score
         self.shared = shared
         self.a_tokens = a_tokens
         self.b_tokens = b_tokens
+        #: The two names are identical once entity types are stripped.
+        self.exact = exact
 
     @property
     def weak(self) -> bool:
@@ -83,7 +86,14 @@ class OrgMatch:
         They are also where the false positives live, because two
         committees of the same candidate share exactly as much. Treat a
         weak match as a candidate to corroborate, not a conclusion.
+
+        An exact match is never weak, however few tokens it has. A
+        one-word organisation compared against itself was previously
+        reported weak purely because one shared token is fewer than two,
+        which made ``require_strong`` reject identical names.
         """
+        if self.exact:
+            return False
         return len(self.shared) < 2
 
     def __bool__(self) -> bool:
@@ -91,7 +101,8 @@ class OrgMatch:
 
     def __repr__(self) -> str:
         return (f"OrgMatch(score={self.score:.2f}, "
-                f"shared={sorted(self.shared)}, weak={self.weak})")
+                f"shared={sorted(self.shared)}, "
+                f"exact={self.exact}, weak={self.weak})")
 
 
 def compare_orgs(a: str, b: str) -> OrgMatch:
@@ -106,13 +117,27 @@ def compare_orgs(a: str, b: str) -> OrgMatch:
     names, token-set similarity scored a genuine abbreviation match only
     marginally above a known false pair, leaving no separating
     threshold.
+
+    A name can reduce to nothing distinctive — "AT&T" is entirely a
+    preposition and a dropped initial. Such a name cannot be compared by
+    overlap at all, so it falls back to equality of the stripped form.
+    That keeps it matching itself and its suffixed variants while
+    refusing to match a longer name that merely contains the word.
     """
+    stripped_a = strip_entity_types(a)
+    exact = bool(stripped_a) and stripped_a == strip_entity_types(b)
+
     da, db = distinctive_tokens(a), distinctive_tokens(b)
+    if not da and not db:
+        return OrgMatch(1.0 if exact else 0.0, set(), da, db, exact)
     if not da or not db:
-        return OrgMatch(0.0, set(), da, db)
+        # One side has something to identify it and the other has
+        # nothing, so there is no evidence either way. Reporting no match
+        # is the honest answer rather than the confident one.
+        return OrgMatch(0.0, set(), da, db, exact)
     shared = da & db
     score = len(shared) / min(len(da), len(db)) if shared else 0.0
-    return OrgMatch(score, shared, da, db)
+    return OrgMatch(score, shared, da, db, exact)
 
 
 def same_org(a: str, b: str, threshold: float = DEFAULT_THRESHOLD,

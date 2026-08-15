@@ -30,7 +30,7 @@ from .orgs import (
     same_org, DEFAULT_THRESHOLD,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "NameKind", "classify", "is_person",

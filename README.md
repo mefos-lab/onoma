@@ -96,9 +96,30 @@ person matching, but do not be surprised by a miss".
 | `DEFAULT_THRESHOLD` | `float` | Default overlap threshold for `same_org` |
 
 `OrgMatch` carries `score`, `shared` (the shared distinctive tokens),
-`a_tokens`, `b_tokens`, and `weak` — true when the match rests on a
-single shared token. It is also truthy/falsy directly, so
-`if compare_orgs(a, b):` works.
+`a_tokens`, `b_tokens`, `exact` (the two names are identical once entity
+types are stripped) and `weak` — true when the match rests on a single
+shared token, and never true for an exact match. It is also truthy/falsy
+directly, so `if compare_orgs(a, b):` works.
+
+### Names with nothing distinctive
+
+A name can reduce to no distinctive tokens at all. `AT&T` is the case
+that surfaced this: the ampersand folds away and the lone `T` is dropped
+as an initial, leaving the preposition `at`.
+
+Such a name cannot be compared by token overlap, since the empty set
+shares nothing even with itself, so it falls back to equality of the
+stripped form. It therefore matches itself and its suffixed variants,
+and refuses to match a longer name that merely contains the word:
+
+```python
+onoma.same_org("AT&T", "AT&T Inc")                    # True  (exact)
+onoma.same_org("AT&T", "MILLER'S SUPPLIES AT WORK")   # False
+```
+
+Where one name has distinctive tokens and the other has none, the result
+is no match — there is no evidence either way, and saying so is more
+useful than a confident guess.
 
 ## Classify before matching
 
@@ -152,7 +173,9 @@ string comparison cannot. **Prefer identifier joins wherever the data
 offers them**, and treat a weak match as a candidate to corroborate
 rather than a conclusion. `same_org(..., require_strong=True)` rejects
 single-token matches outright, at the cost of losing genuine
-abbreviations along with the false ones.
+abbreviations along with the false ones. It does *not* reject exact
+matches: a one-word organisation compared against itself is certain
+regardless of how few words it has.
 
 ## Design notes
 

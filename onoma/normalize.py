@@ -21,7 +21,12 @@ from unidecode import unidecode
 # entity — "COLLINS FOR VICTORY" and "COLLINS FOR SENATOR" share "for"
 # and a surname without being the same committee.
 GENERIC_ORG_TOKENS = frozenset({
+    # Function words. A preposition is never evidence of identity, and
+    # omitting one is worse than it looks: "AT&T" folds to the single
+    # token "at", which then matched every name containing the word —
+    # "MILLER'S SUPPLIES AT WORK" among them, at a perfect score.
     "the", "of", "for", "and", "a", "an",
+    "at", "in", "on", "to", "by", "with", "from", "or",
     "committee", "commitee", "cmte", "pac", "fund", "funds",
     "political", "action", "campaign", "victory", "leadership",
     "friends", "citizens", "people", "americans", "our",
