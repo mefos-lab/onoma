@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
+from rapidfuzz.distance import Levenshtein
 from unidecode import unidecode
 
 # Tokens that carry no identifying signal in an organisation name. A
@@ -66,3 +67,20 @@ def tokens(text: str | None) -> list[str]:
 
 def is_generic_org_token(token: str) -> bool:
     return token in GENERIC_ORG_TOKENS
+
+
+def edit_distance(a: str | None, b: str | None, *, folded: bool = True) -> int:
+    """Levenshtein distance between two names.
+
+    Exposed because near-identity is not always evidence of sameness. A
+    small distance can mean two records describe one entity — or that
+    two entities were deliberately named to be confusable, which is a
+    signal in its own right. Callers doing detection rather than
+    matching need the number, not a verdict.
+
+    By default both sides are folded first, so the distance reflects
+    meaningful difference rather than casing or diacritics. Pass
+    ``folded=False`` to compare the raw strings.
+    """
+    x, y = (fold(a), fold(b)) if folded else (a or "", b or "")
+    return int(Levenshtein.distance(x, y))

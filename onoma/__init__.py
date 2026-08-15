@@ -18,7 +18,9 @@ Deliberately pure-Python. Every dependency installs without a C
 toolchain, so this stays usable by anyone who can run pip.
 """
 
-from .normalize import fold, tokens, is_generic_org_token, GENERIC_ORG_TOKENS
+from .normalize import (
+    fold, tokens, is_generic_org_token, edit_distance, GENERIC_ORG_TOKENS,
+)
 from .persons import (
     strip_titles, given_name_variants, given_names_match, same_person,
 )
@@ -32,7 +34,8 @@ __version__ = "0.1.0"
 
 __all__ = [
     "NameKind", "classify", "is_person",
-    "fold", "tokens", "is_generic_org_token", "GENERIC_ORG_TOKENS",
+    "fold", "tokens", "is_generic_org_token", "edit_distance",
+    "GENERIC_ORG_TOKENS",
     "strip_titles", "given_name_variants", "given_names_match", "same_person",
     "strip_entity_types", "distinctive_tokens", "compare_orgs", "OrgMatch",
     "same_org", "DEFAULT_THRESHOLD",
