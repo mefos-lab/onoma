@@ -44,7 +44,26 @@ onoma.same_org("ARKANSAS LEADERSHIP PAC",
 
 onoma.same_org("COLLINS FOR VICTORY", "COLLINS FOR SENATOR")
 # False — shares only a surname and filler words
+
+onoma.classify("DCCC")                  # NameKind.ORGANISATION
+onoma.classify("Sen. Marsha Blackburn") # NameKind.PERSON
 ```
+
+### Classify before matching
+
+A field nominally holding people also holds party committees, caucus
+PACs, fundraising vehicles and placeholders. Attempting person matching
+on those and counting the failures measures the wrong thing — they are
+not unmatched people, they are not people.
+
+```python
+people = [n for n in names if onoma.is_person(n)]
+```
+
+Measured on several hundred real lobbying-disclosure honoree names,
+about a tenth were organisations. Separating them changes the reported
+resolution rate substantially, and the difference is entirely in the
+denominator.
 
 ## Design notes
 
