@@ -18,7 +18,10 @@ class TestFold:
     @pytest.mark.parametrize("raw,expected", [
         ("Ben Ray Luján", "ben ray lujan"),
         ("Linda T. Sánchez", "linda t sanchez"),
-        ("O'Brien-Smith", "o brien smith"),
+        # Hyphens and apostrophes join rather than split, so a compound
+        # surname stays one token and compares against itself written
+        # either way.
+        ("O'Brien-Smith", "obriensmith"),
         ("  MIXED   Case  ", "mixed case"),
     ])
     def test_folds(self, raw, expected):
@@ -187,6 +190,24 @@ class TestTitleForms:
         assert o.strip_titles(raw) == expected
 
 
+class TestCompoundSurnames:
+    def test_hyphenated_surname_matches_either_form(self):
+        assert o.same_person("Rep. Kamlager-Dove", "Sydney Kamlager-Dove")
+
+    def test_apostrophe_surname(self):
+        assert o.same_person("Sean O'Brien", "Sean OBrien")
+
+
+class TestAnnotations:
+    @pytest.mark.parametrize("raw,expected", [
+        ("Rep. Lisa Sanchez (D-CA-38)", "lisa sanchez"),
+        ("U.S. Rep. Haley Stevens, U.S. Senate Candidate", "haley stevens"),
+        ("Zoe Cadore, Candidate for U.S. House of Representatives", "zoe cadore"),
+    ])
+    def test_strips_trailing_role_and_district(self, raw, expected):
+        assert o.strip_titles(raw) == expected
+
+
 class TestSingleEditVariants:
     """Sources disagree on a single character for the same person."""
 
@@ -208,7 +229,7 @@ class TestSingleEditVariants:
 class TestClassify:
     @pytest.mark.parametrize("name", [
         "DCCC", "Congressional Black Caucus PAC", "Friends of David Schweikert",
-        "1.29.25 DSCC Event", "General Fund", "Elect Democratic Women",
+        "1.29.25 DSCC Event", "Elect Democratic Women",
         "Democratic Members of House Committee on Ways and Means",
         "Christian Menefee for Congress",
     ])
@@ -225,3 +246,12 @@ class TestClassify:
 
     def test_empty_is_unknown(self):
         assert o.classify("") is o.NameKind.UNKNOWN
+
+    @pytest.mark.parametrize("name", [
+        "N/A", "n/a", "General Fund", "Various Democratic Congressional Candidates",
+    ])
+    def test_placeholders_are_unknown_not_people(self, name):
+        """Filing placeholders are neither. Left unhandled they classify
+        as people and inflate the unresolved count."""
+        assert o.classify(name) is o.NameKind.UNKNOWN
+        assert not o.is_person(name)

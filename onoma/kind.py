@@ -53,6 +53,12 @@ _PERSON_MARKERS = frozenset({
 })
 
 
+_PLACEHOLDERS = frozenset({
+    "na", "n a", "none", "no", "tbd", "unknown", "unspecified",
+    "not applicable", "general", "general fund", "misc", "other",
+})
+
+
 class NameKind(str, Enum):
     PERSON = "person"
     ORGANISATION = "organisation"
@@ -69,6 +75,13 @@ def classify(name: str | None) -> NameKind:
     """
     folded = fold(name)
     if not folded:
+        return NameKind.UNKNOWN
+
+    # Filing placeholders. Common enough to be worth naming explicitly:
+    # left unhandled they classify as people and inflate the miss count.
+    if folded in _PLACEHOLDERS:
+        return NameKind.UNKNOWN
+    if folded.split()[0] in {"various", "multiple", "assorted", "several"}:
         return NameKind.UNKNOWN
 
     if any(phrase in folded for phrase in _ORG_PHRASES):

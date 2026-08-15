@@ -13,6 +13,7 @@ Prefix matching alone silently loses the second half.
 
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 
 from nameparser import HumanName
@@ -70,6 +71,25 @@ def _namer() -> NickNamer:
     return NickNamer()
 
 
+_ANNOTATION = re.compile(
+    r"\s*\([^)]*\)"          # "(D-CA-38)" — party and district
+    r"|\s*,\s*(?:u\.?s\.?\s*)?(?:senate|house|congressional)\b.*$"
+    r"|\s*,\s*candidate\b.*$"   # ", Candidate for U.S. House..."
+    r"|\s*,\s*(?:d|r|i)-[a-z]{2}\b.*$",  # ", D-CA"
+    re.IGNORECASE,
+)
+
+
+def _drop_annotations(name: str) -> str:
+    """Remove trailing role and district annotations.
+
+    Filings append context to a name — a party/district code, or the
+    office someone is separately seeking. It is not part of the name and
+    defeats parsing when left in place.
+    """
+    return _ANNOTATION.sub("", name).strip(" ,")
+
+
 @lru_cache(maxsize=8192)
 def strip_titles(name: str) -> str:
     """Remove honorifics and offices, returning the personal name.
@@ -85,7 +105,8 @@ def strip_titles(name: str) -> str:
     spelled-out office prefixes are stripped from the folded string
     directly rather than by re-parsing it.
     """
-    parsed = HumanName(name or "")
+    name = _drop_annotations(name or "")
+    parsed = HumanName(name)
     kept = " ".join(p for p in (parsed.first, parsed.middle, parsed.last) if p)
     folded = fold(kept) if kept else fold(name)
     for title in _EXTRA_TITLES:
