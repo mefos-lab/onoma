@@ -28,6 +28,11 @@ GENERIC_ORG_TOKENS = frozenset({
     "association", "assn", "society", "group", "trust",
 })
 
+# Hyphens and apostrophes are removed rather than turned into spaces, so
+# "Kamlager-Dove" and "O'Brien" stay single tokens. Splitting them made a
+# compound surname compare as two separate names, and the surname check
+# then failed against the same person written the other way.
+_JOINERS = re.compile(r"[-\u2010-\u2015'\u2019]", re.UNICODE)
 _PUNCT = re.compile(r"[^\w\s]", re.UNICODE)
 _SPACE = re.compile(r"\s+")
 
@@ -44,7 +49,8 @@ def fold(text: str | None) -> str:
     # NFKC first so composed and decomposed forms agree before transliteration.
     text = unicodedata.normalize("NFKC", text)
     text = unidecode(text)
-    text = _PUNCT.sub(" ", text.lower())
+    text = _JOINERS.sub("", text.lower())
+    text = _PUNCT.sub(" ", text)
     return _SPACE.sub(" ", text).strip()
 
 

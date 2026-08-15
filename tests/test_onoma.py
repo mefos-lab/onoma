@@ -18,7 +18,10 @@ class TestFold:
     @pytest.mark.parametrize("raw,expected", [
         ("Ben Ray Luján", "ben ray lujan"),
         ("Linda T. Sánchez", "linda t sanchez"),
-        ("O'Brien-Smith", "o brien smith"),
+        # Hyphens and apostrophes join rather than split, so a compound
+        # surname stays one token and compares against itself written
+        # either way.
+        ("O'Brien-Smith", "obriensmith"),
         ("  MIXED   Case  ", "mixed case"),
     ])
     def test_folds(self, raw, expected):
@@ -142,3 +145,113 @@ class TestCompareOrgs:
     def test_bool_protocol(self):
         assert bool(o.compare_orgs("Acme Holdings LLC", "ACME HOLDINGS L.L.C."))
         assert not bool(o.compare_orgs("MICROSOFT PAC", "GOOGLE PAC"))
+
+
+# =============================================================================
+# Regressions found by running against a real corpus
+#
+# Each case below comes from measuring resolution across several hundred
+# real LD-203 honoree names, not from imagination.
+# =============================================================================
+
+class TestTransitiveNicknameRejection:
+    """Two nicknames of one canonical are not the same name.
+
+    Found as a live false positive: "Tina" and "Chris" are both
+    nicknames of "Christina", so intersecting variant sets equated Tina
+    Smith with Chris Smith. Linkage must be direct — one name a recorded
+    nickname *of the other* — not transitive through a shared canonical.
+    """
+
+    @pytest.mark.parametrize("a,b", [
+        ("Tina Smith", "Chris Smith"),
+        ("Chris Smith", "Tina Smith"),
+        ("Kit Smith", "Chris Smith"),
+    ])
+    def test_rejects_shared_canonical(self, a, b):
+        assert not o.same_person(a, b)
+
+    @pytest.mark.parametrize("a,b", [
+        ("Bob Latta", "Robert E. Latta"),
+        ("Lizzie Fletcher", "Elizabeth Fletcher"),
+    ])
+    def test_direct_nickname_still_matches(self, a, b):
+        assert o.same_person(a, b)
+
+
+class TestTitleForms:
+    @pytest.mark.parametrize("raw,expected", [
+        ("Majority Leader Steve Scalise", "steve scalise"),
+        ("U.S. Rep. Hakeem Jeffries", "hakeem jeffries"),
+        ("U.S. Sen. Lisa Blount Rochester", "lisa blount rochester"),
+        ("Speaker of the House Mike Johnson", "mike johnson"),
+    ])
+    def test_strips_office_and_leadership_titles(self, raw, expected):
+        assert o.strip_titles(raw) == expected
+
+
+class TestCompoundSurnames:
+    def test_hyphenated_surname_matches_either_form(self):
+        assert o.same_person("Rep. Kamlager-Dove", "Sydney Kamlager-Dove")
+
+    def test_apostrophe_surname(self):
+        assert o.same_person("Sean O'Brien", "Sean OBrien")
+
+
+class TestAnnotations:
+    @pytest.mark.parametrize("raw,expected", [
+        ("Rep. Lisa Sanchez (D-CA-38)", "lisa sanchez"),
+        ("U.S. Rep. Haley Stevens, U.S. Senate Candidate", "haley stevens"),
+        ("Zoe Cadore, Candidate for U.S. House of Representatives", "zoe cadore"),
+    ])
+    def test_strips_trailing_role_and_district(self, raw, expected):
+        assert o.strip_titles(raw) == expected
+
+
+class TestSingleEditVariants:
+    """Sources disagree on a single character for the same person."""
+
+    @pytest.mark.parametrize("a,b", [
+        ("Shelly Moore Capito", "Shelley Moore Capito"),
+        ("Lindsay Graham", "Lindsey Graham"),
+    ])
+    def test_accepts_one_edit_in_given_name(self, a, b):
+        assert o.same_person(a, b)
+
+    def test_short_given_names_are_not_edit_matched(self):
+        """Below the length floor one edit is too large a proportion."""
+        assert not o.same_person("Dan Meuser", "Don Meuser")
+
+    def test_surname_still_must_match_exactly(self):
+        assert not o.same_person("Shelly Moore Capito", "Shelley Moore Capita")
+
+
+class TestClassify:
+    @pytest.mark.parametrize("name", [
+        "DCCC", "Congressional Black Caucus PAC", "Friends of David Schweikert",
+        "1.29.25 DSCC Event", "Elect Democratic Women",
+        "Democratic Members of House Committee on Ways and Means",
+        "Christian Menefee for Congress",
+    ])
+    def test_organisations(self, name):
+        assert o.classify(name) is o.NameKind.ORGANISATION
+        assert not o.is_person(name)
+
+    @pytest.mark.parametrize("name", [
+        "Sen. Marsha Blackburn", "Elizabeth Fletcher", "Gov. Maura Healey",
+    ])
+    def test_people(self, name):
+        assert o.classify(name) is o.NameKind.PERSON
+        assert o.is_person(name)
+
+    def test_empty_is_unknown(self):
+        assert o.classify("") is o.NameKind.UNKNOWN
+
+    @pytest.mark.parametrize("name", [
+        "N/A", "n/a", "General Fund", "Various Democratic Congressional Candidates",
+    ])
+    def test_placeholders_are_unknown_not_people(self, name):
+        """Filing placeholders are neither. Left unhandled they classify
+        as people and inflate the unresolved count."""
+        assert o.classify(name) is o.NameKind.UNKNOWN
+        assert not o.is_person(name)

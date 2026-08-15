@@ -22,6 +22,7 @@ from .normalize import fold, tokens, is_generic_org_token, GENERIC_ORG_TOKENS
 from .persons import (
     strip_titles, given_name_variants, given_names_match, same_person,
 )
+from .kind import NameKind, classify, is_person
 from .orgs import (
     strip_entity_types, distinctive_tokens, compare_orgs, OrgMatch,
     same_org, DEFAULT_THRESHOLD,
@@ -30,6 +31,7 @@ from .orgs import (
 __version__ = "0.1.0"
 
 __all__ = [
+    "NameKind", "classify", "is_person",
     "fold", "tokens", "is_generic_org_token", "GENERIC_ORG_TOKENS",
     "strip_titles", "given_name_variants", "given_names_match", "same_person",
     "strip_entity_types", "distinctive_tokens", "compare_orgs", "OrgMatch",
